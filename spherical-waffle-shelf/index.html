@@ -1,0 +1,1150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spherical Waffle Shelf</title>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --text: #1f2328; --muted: #6a6f76; --border: #d9d6cf;
+  --accent: #b5562a; --accent-text: #ffffff; --sheet: #efe2c8; --sheet-border: #9c8a66;
+  --err-bg: #fde8e6; --err: #a3261b; --warn-bg: #fff4d6; --warn: #7a5600; --info-bg: #eef1f4; --info: #3d4852;
+  --cut: #ff0000; --engrave: #0000ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17191c; --panel: #212428; --text: #e6e6e3; --muted: #9aa0a6; --border: #3a3e44;
+    --accent: #e07a4a; --accent-text: #1a1a1a; --sheet: #3b3426; --sheet-border: #8a7a58;
+    --err-bg: #4a1f1c; --err: #ffb4ab; --warn-bg: #43380f; --warn: #ffd97a; --info-bg: #2b3036; --info: #c3cad1;
+    --cut: #ff5a5a; --engrave: #6f9bff;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.layout { display: grid; grid-template-columns: 330px 1fr; min-height: 100vh; }
+aside { background: var(--panel); border-right: 1px solid var(--border); padding: 16px; overflow-y: auto; max-height: 100vh; position: sticky; top: 0; }
+main { padding: 16px 20px 40px; min-width: 0; }
+h1 { font-size: 18px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 24px 0 8px; }
+.sub { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px 4px; margin: 0 0 12px; }
+legend { font-weight: 600; padding: 0 4px; font-size: 13px; }
+.row { display: grid; grid-template-columns: 1fr 130px; align-items: center; gap: 8px; margin: 0 0 8px; }
+.row.bool { grid-template-columns: 20px 1fr; }
+.row .lbl small { display: block; color: var(--muted); font-size: 11.5px; line-height: 1.3; }
+.row .unit { color: var(--muted); font-size: 11.5px; }
+.inwrap { display: flex; align-items: center; gap: 4px; }
+input[type=number], select { width: 100%; padding: 4px 6px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); font: inherit; }
+input[type=number] { min-width: 0; }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; align-items: center; }
+.toolbar .spacer { flex: 1; }
+#shareMsg { color: var(--muted); font-size: 12px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.card .k { color: var(--muted); font-size: 12px; }
+.card .v { font-size: 15px; font-weight: 600; }
+.msgs { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 6px; }
+.msgs li { padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+.msgs .error { background: var(--err-bg); color: var(--err); }
+.msgs .warn { background: var(--warn-bg); color: var(--warn); }
+.msgs .info { background: var(--info-bg); color: var(--info); }
+#view3d { position: relative; height: 440px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+#view3d canvas { display: block; }
+#view3d .overlay { position: absolute; right: 8px; top: 8px; display: flex; gap: 6px; }
+#view3d .placeholder { padding: 16px; color: var(--muted); }
+.sheet { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin: 0 0 12px; }
+.sheet header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; }
+.sheet header strong { margin-right: auto; }
+.sheet svg { width: 100%; height: auto; display: block; max-height: 70vh; }
+table { border-collapse: collapse; width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; }
+th, td { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--border); }
+th { font-weight: 600; color: var(--muted); }
+.muted { color: var(--muted); }
+ol.steps { padding-left: 20px; }
+.legend-swatch { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin: 0 4px 0 10px; }
+@media (max-width: 820px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--border); }
+  main { padding: 16px; }
+  #view3d { height: 320px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <h1>Spherical Waffle Shelf</h1>
+    <p class="sub">Interlocking plywood shelf shaped like half an ellipsoid. All sizes in mm.</p>
+    <form id="settings" autocomplete="off" onsubmit="return false"></form>
+  </aside>
+  <main>
+    <div class="toolbar">
+      <button id="btnShare" class="primary" type="button">Copy settings link</button>
+      <button id="btnLoad" type="button">Load settings from SVG/DXF…</button>
+      <input id="fileLoad" type="file" accept=".svg,.dxf,image/svg+xml" hidden>
+      <button id="btnReset" type="button">Reset to defaults</button>
+      <span id="shareMsg"></span>
+      <span class="spacer"></span>
+      <button id="btnAllSvg" type="button">Download all SVG</button>
+      <button id="btnAllDxf" type="button">Download all DXF</button>
+    </div>
+
+    <div class="cards" id="summary"></div>
+    <ul class="msgs" id="messages"></ul>
+
+    <h2>Preview</h2>
+    <div id="view3d"><div class="placeholder">Loading 3D preview…</div></div>
+
+    <h2>Sheets
+      <span class="muted" style="font-weight:400;font-size:12px">
+        <span class="legend-swatch" style="border-color:var(--cut)"></span>cut
+        <span class="legend-swatch" style="border-color:var(--engrave)"></span>engrave labels
+      </span>
+    </h2>
+    <div id="sheets"></div>
+
+    <h2>Pieces</h2>
+    <table id="parts"></table>
+
+    <h2>Assembly</h2>
+    <ol class="steps" id="assembly"></ol>
+  </main>
+</div>
+
+<script>
+'use strict';
+
+/* ------------------------------------------------------------------ *
+ * Settings schema (drives the form, the share link and file metadata)
+ * ------------------------------------------------------------------ */
+const VERSION = 1;
+const SHEETS = {
+  speedy: { label: 'Trotec Speedy (730 × 430)', w: 730, h: 430 },
+  nova:   { label: 'Thunder Nova 51 (1300 × 900)', w: 1300, h: 900 },
+  ply4x4: { label: "4' × 4' plywood (1219 × 1219)", w: 1219.2, h: 1219.2 },
+  ply4x8: { label: "4' × 8' plywood (2438 × 1219)", w: 2438.4, h: 1219.2 },
+  custom: { label: 'Custom size' },
+};
+const SCHEMA = [
+  { group: 'Size' },
+  { key: 'w', label: 'Width', unit: 'mm', def: 600, min: 50, max: 5000, step: 1 },
+  { key: 'h', label: 'Height', unit: 'mm', def: 600, min: 50, max: 5000, step: 1, help: 'Of the full ellipsoid, before any flat-bottom cut.' },
+  { key: 'd', label: 'Depth', unit: 'mm', def: 200, min: 20, max: 2500, step: 1, help: 'From the wall to the front.' },
+  { key: 'ns', label: 'Shelves', type: 'int', def: 3, min: 1, max: 40, step: 1 },
+  { key: 'nd', label: 'Vertical dividers', type: 'int', def: 3, min: 1, max: 40, step: 1 },
+  { group: 'Material' },
+  { key: 't', label: 'Thickness', unit: 'mm', def: 6, min: 0.5, max: 50, step: 0.1 },
+  { key: 'cl', label: 'Slot clearance', unit: 'mm', def: 0.1, min: -1, max: 5, step: 0.05, help: 'Added to the thickness for slot width. Tune with a test cut.' },
+  { group: 'Base' },
+  { key: 'fb', label: 'Flat bottom', type: 'bool', def: false },
+  { key: 'fbp', label: 'Cut off bottom', unit: '% of height', def: 10, min: 1, max: 45, step: 0.5, show: s => s.fb },
+  { key: 'ft', label: 'Feet under the base', type: 'bool', def: false, show: s => s.fb },
+  { key: 'fh', label: 'Foot height', unit: 'mm', def: 25, min: 5, max: 300, step: 1, show: s => s.fb && s.ft },
+  { group: 'Back panel' },
+  { key: 'bp', label: 'Back panel', type: 'bool', def: false, help: 'Sits behind the shelves; tabs on the shelves’ back edges lock into it.' },
+  { key: 'bpn', label: 'Split into pieces', type: 'int', def: 1, min: 1, max: 20, step: 1, show: s => s.bp, help: 'Seams fall behind dividers, so they are hidden and supported.' },
+  { group: 'Machine & sheet' },
+  { key: 'mode', label: 'Machine', type: 'select', def: 'laser', options: [['laser', 'Laser'], ['cnc', 'CNC router']] },
+  { key: 'bit', label: 'Endmill', type: 'select', def: '6.35', options: [['3.175', '1/8" (3.175 mm)'], ['6.35', '1/4" (6.35 mm)'], ['custom', 'Custom']], show: s => s.mode === 'cnc', help: 'Inside corners get dogbones sized to this.' },
+  { key: 'bitc', label: 'Endmill diameter', unit: 'mm', def: 6.35, min: 0.5, max: 25, step: 0.01, show: s => s.mode === 'cnc' && s.bit === 'custom' },
+  { key: 'sheet', label: 'Sheet', type: 'select', def: 'nova', options: Object.entries(SHEETS).map(([k, v]) => [k, v.label]) },
+  { key: 'sw', label: 'Sheet width', unit: 'mm', def: 1000, min: 50, max: 5000, step: 1, show: s => s.sheet === 'custom' },
+  { key: 'sh', label: 'Sheet height', unit: 'mm', def: 600, min: 50, max: 5000, step: 1, show: s => s.sheet === 'custom' },
+  { key: 'mg', label: 'Sheet margin', unit: 'mm', def: 10, min: 0, max: 200, step: 1 },
+  { key: 'gap', label: 'Gap between pieces', unit: 'mm', def: 5, min: 0, max: 100, step: 0.5, help: 'CNC mode uses at least the endmill diameter + 1 mm.' },
+  { key: 'rot', label: 'Allow rotating pieces 90°', type: 'bool', def: true },
+  { group: 'Labels & checks' },
+  { key: 'lb', label: 'Engrave piece labels', type: 'bool', def: true },
+  { key: 'lh', label: 'Label height', unit: 'mm', def: 10, min: 2, max: 100, step: 0.5, show: s => s.lb },
+  { key: 'minj', label: 'Minimum joint length', unit: 'mm', def: 20, min: 0, max: 500, step: 1, help: 'Shelf/divider crossings shorter than this are flagged.' },
+  { key: 'minp', label: 'Minimum piece depth', unit: 'mm', def: 30, min: 0, max: 500, step: 1, help: 'Pieces shallower than this are flagged.' },
+  { key: 'drop', label: 'Drop pieces that fail the checks', type: 'bool', def: false },
+];
+const FIELDS = SCHEMA.filter(f => f.key);
+
+function defaults() {
+  const s = {};
+  for (const f of FIELDS) s[f.key] = f.def;
+  return s;
+}
+function parseField(f, raw) {
+  if (raw === null || raw === undefined) return f.def;
+  if (f.type === 'bool') return raw === true || raw === '1' || raw === 'true' || raw === 1;
+  if (f.type === 'select') return f.options.some(o => o[0] === String(raw)) ? String(raw) : f.def;
+  let n = parseFloat(raw);
+  if (!Number.isFinite(n)) return f.def;
+  if (f.type === 'int') n = Math.round(n);
+  return Math.min(f.max, Math.max(f.min, n));
+}
+function encodeSettings(s) {
+  const p = new URLSearchParams();
+  p.set('v', VERSION);
+  for (const f of FIELDS) p.set(f.key, f.type === 'bool' ? (s[f.key] ? '1' : '0') : String(s[f.key]));
+  return p.toString();
+}
+// Unknown keys are ignored and missing keys fall back to defaults, so old
+// links keep working as settings are added. Bump VERSION and migrate here
+// if a key is ever renamed.
+function decodeSettings(str) {
+  const p = new URLSearchParams(String(str || '').replace(/^[#?]/, ''));
+  const s = defaults();
+  for (const f of FIELDS) if (p.has(f.key)) s[f.key] = parseField(f, p.get(f.key));
+  return s;
+}
+const bitDiameter = s => s.mode !== 'cnc' ? 0 : (s.bit === 'custom' ? s.bitc : parseFloat(s.bit));
+const sheetSize = s => s.sheet === 'custom' ? { w: s.sw, h: s.sh } : SHEETS[s.sheet];
+
+/* ------------------------------------------------------------------ *
+ * 2D helpers. Piece coordinates are math-style (y up). Outer rings are
+ * counter-clockwise and holes clockwise, so material is always on the
+ * left of the direction of travel.
+ * ------------------------------------------------------------------ */
+const P = (x, y, sharp = false) => ({ x, y, sharp });
+const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y });
+const len = v => Math.hypot(v.x, v.y);
+const unit = v => { const l = len(v) || 1; return { x: v.x / l, y: v.y / l }; };
+const cross = (a, b) => a.x * b.y - a.y * b.x;
+const range = n => Array.from({ length: n }, (_, i) => i);
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+function signedArea(pts) {
+  let A = 0;
+  for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; A += p.x * q.y - q.x * p.y; }
+  return A / 2;
+}
+function dedupe(pts) {
+  const out = [];
+  for (const p of pts) {
+    const q = out[out.length - 1];
+    if (q && Math.abs(q.x - p.x) < 1e-7 && Math.abs(q.y - p.y) < 1e-7) { q.sharp = q.sharp || p.sharp; continue; }
+    out.push(p);
+  }
+  while (out.length > 1) {
+    const a = out[0], z = out[out.length - 1];
+    if (Math.abs(a.x - z.x) < 1e-7 && Math.abs(a.y - z.y) < 1e-7) { a.sharp = a.sharp || z.sharp; out.pop(); } else break;
+  }
+  return out;
+}
+function orient(pts, ccw) {
+  const A = signedArea(pts);
+  return (A > 0) === ccw ? pts : pts.slice().reverse();
+}
+function bbox(pts) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of pts) { if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x; if (p.y < y0) y0 = p.y; if (p.y > y1) y1 = p.y; }
+  return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 };
+}
+function perimeter(pts, closed = true) {
+  let L = 0;
+  for (let i = 0; i < pts.length - (closed ? 0 : 1); i++) L += len(sub(pts[(i + 1) % pts.length], pts[i]));
+  return L;
+}
+
+/**
+ * Walk along an edge whose points are parameterised by a monotonic value s,
+ * replacing intervals [s0, s1] with notches (slots or tabs).
+ * samples: [{s, x, y}] sorted by s. pointAt(s) -> [x, y] on the edge.
+ * notches: [{s0, s1, inner: [[x, y], ...]}] sorted by s0.
+ */
+function walk(samples, pointAt, notches) {
+  const out = [];
+  let k = 0, skipUntil = -Infinity;
+  const emit = n => {
+    const [x0, y0] = pointAt(n.s0); out.push(P(x0, y0, true));
+    for (const [x, y] of n.inner) out.push(P(x, y, true));
+    const [x1, y1] = pointAt(n.s1); out.push(P(x1, y1, true));
+    skipUntil = n.s1;
+  };
+  for (const p of samples) {
+    while (k < notches.length && notches[k].s0 <= p.s) emit(notches[k++]);
+    if (p.s <= skipUntil) continue;
+    out.push(P(p.x, p.y));
+  }
+  while (k < notches.length) emit(notches[k++]);
+  return out;
+}
+
+/**
+ * CNC inside-corner relief. Concave corners flagged `sharp` get a dogbone:
+ * a bit-radius circle along the corner bisector that passes through the
+ * corner. When two such corners are too close for separate dogbones (e.g. a
+ * slot bottom barely wider than the bit), the edge between them becomes a
+ * half circle instead, which still clears both corners.
+ */
+function dogbone(pts, r, problems, name) {
+  const n = pts.length, R2 = Math.SQRT2 * r;
+  const dirIn = i => unit(sub(pts[i], pts[(i - 1 + n) % n]));
+  const dirOut = i => unit(sub(pts[(i + 1) % n], pts[i]));
+  const conc = pts.map((p, i) => p.sharp && cross(dirIn(i), dirOut(i)) < -0.5);
+  const uStart = new Array(n).fill(false), handled = new Array(n).fill(false);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    if (conc[i] && conc[j] && len(sub(pts[j], pts[i])) < 2 * R2 - 1e-9) {
+      uStart[i] = true; handled[i] = handled[j] = true;
+      if (len(sub(pts[j], pts[i])) < 2 * r - 1e-6) problems.add(`${name}: a slot or hole is narrower than the endmill, so it cannot be cut.`);
+    }
+  }
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    if (uStart[i]) {
+      const q = pts[(i + 1) % n];
+      const M = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }, rad = len(sub(q, p)) / 2;
+      const e = unit(sub(q, p)), a0 = Math.atan2(e.y, e.x);
+      const m = Math.max(8, Math.ceil(Math.PI * rad / 0.5));
+      out.push(P(p.x, p.y));
+      for (let k = 1; k < m; k++) { const th = a0 + Math.PI - Math.PI * k / m; out.push(P(M.x + rad * Math.cos(th), M.y + rad * Math.sin(th))); }
+    } else if (handled[i] || !conc[i]) {
+      out.push(P(p.x, p.y));
+    } else {
+      const d1 = dirIn(i), d2 = dirOut(i);
+      const lin = len(sub(p, pts[(i - 1 + n) % n])), lout = len(sub(pts[(i + 1) % n], p));
+      if (lin < R2 - 1e-9 || lout < R2 - 1e-9) { problems.add(`${name}: an inside corner is too tight for a dogbone with this endmill.`); out.push(P(p.x, p.y)); continue; }
+      const bis = unit({ x: -d1.x + d2.x, y: -d1.y + d2.y });
+      const C = { x: p.x + r * bis.x, y: p.y + r * bis.y };
+      const P1 = { x: p.x - d1.x * R2, y: p.y - d1.y * R2 }, P2 = { x: p.x + d2.x * R2, y: p.y + d2.y * R2 };
+      const a1 = Math.atan2(P1.y - C.y, P1.x - C.x);
+      const m = Math.max(8, Math.ceil(Math.PI * r / 0.4));
+      out.push(P(P1.x, P1.y));
+      for (let k = 1; k < m; k++) { const th = a1 - Math.PI * k / m; out.push(P(C.x + r * Math.cos(th), C.y + r * Math.sin(th))); }
+      out.push(P(P2.x, P2.y));
+    }
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * Single-stroke font for engraved labels (works for laser scoring and
+ * CNC engraving, no font conversion needed). Glyphs are 4 × 6 units.
+ * ------------------------------------------------------------------ */
+const GLYPHS = {
+  '0': [[[0, 0], [4, 0], [4, 6], [0, 6], [0, 0]], [[0, 0], [4, 6]]],
+  '1': [[[1, 5], [2, 6], [2, 0]], [[1, 0], [3, 0]]],
+  '2': [[[0, 6], [4, 6], [4, 3], [0, 3], [0, 0], [4, 0]]],
+  '3': [[[0, 6], [4, 6], [4, 0], [0, 0]], [[1, 3], [4, 3]]],
+  '4': [[[0, 6], [0, 3], [4, 3]], [[3, 6], [3, 0]]],
+  '5': [[[4, 6], [0, 6], [0, 3], [4, 3], [4, 0], [0, 0]]],
+  '6': [[[4, 6], [0, 6], [0, 0], [4, 0], [4, 3], [0, 3]]],
+  '7': [[[0, 6], [4, 6], [1, 0]]],
+  '8': [[[0, 0], [4, 0], [4, 6], [0, 6], [0, 0]], [[0, 3], [4, 3]]],
+  '9': [[[4, 3], [0, 3], [0, 6], [4, 6], [4, 0], [0, 0]]],
+  'B': [[[0, 0], [0, 6], [3, 6], [4, 5], [4, 4], [3, 3], [0, 3]], [[3, 3], [4, 2], [4, 1], [3, 0], [0, 0]]],
+  'D': [[[0, 0], [0, 6], [2, 6], [4, 4], [4, 2], [2, 0], [0, 0]]],
+  'F': [[[4, 6], [0, 6], [0, 0]], [[0, 3], [3, 3]]],
+  'P': [[[0, 0], [0, 6], [3, 6], [4, 5], [4, 4], [3, 3], [0, 3]]],
+  'S': [[[4, 5], [3, 6], [1, 6], [0, 5], [0, 4], [1, 3], [3, 3], [4, 2], [4, 1], [3, 0], [1, 0], [0, 1]]],
+  '-': [[[1, 3], [3, 3]]],
+};
+const textWidth = (text, h) => (text.length * 6 - 2) * h / 6;
+function textStrokes(text, x0, y0, h) {
+  const k = h / 6, out = [];
+  [...text].forEach((ch, i) => {
+    for (const line of GLYPHS[ch] || []) out.push(line.map(([x, y]) => ({ x: x0 + (i * 6 + x) * k, y: y0 + y * k })));
+  });
+  return out;
+}
+
+// Sutherland–Hodgman: keep the part of a convex polygon where nx·x + ny·y ≤ c.
+function clipPoly(pts, nx, ny, c) {
+  const out = [], f = p => nx * p.x + ny * p.y - c;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length], fp = f(p), fq = f(q);
+    if (fp <= 0) out.push(p);
+    if ((fp <= 0) !== (fq <= 0)) { const k = fp / (fp - fq); out.push(P(p.x + (q.x - p.x) * k, p.y + (q.y - p.y) * k)); }
+  }
+  return out;
+}
+
+function pointInRing(pt, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i], b = pts[j];
+    if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < (b.x - a.x) * (pt.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+function segHitsRect(a, b, R) {
+  // Liang–Barsky clip of segment ab against rectangle R
+  let t0 = 0, t1 = 1;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const checks = [[-dx, a.x - R.x0], [dx, R.x1 - a.x], [-dy, a.y - R.y0], [dy, R.y1 - a.y]];
+  for (const [p, q] of checks) {
+    if (p === 0) { if (q < 0) return false; continue; }
+    const t = q / p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return true;
+}
+function placeLabel(piece, text, h) {
+  const rings = [piece.outer, ...piece.holes];
+  const bb = bbox(piece.outer);
+  const pref = { x: (bb.x0 + bb.x1) / 2, y: (bb.y0 + bb.y1) / 2 };
+  for (const scale of [1, 0.75, 0.5]) {
+    const hh = h * scale, ww = textWidth(text, hh), pad = Math.max(1.5, hh * 0.3);
+    const step = Math.max(hh / 3, Math.max(bb.w, bb.h) / 80, 1);
+    const cands = [];
+    for (let x = bb.x0; x <= bb.x1; x += step) for (let y = bb.y0; y <= bb.y1; y += step) cands.push({ x, y, d: (x - pref.x) ** 2 + (y - pref.y) ** 2 });
+    cands.sort((p, q) => p.d - q.d);
+    for (const c of cands) {
+      const R = { x0: c.x - ww / 2 - pad, x1: c.x + ww / 2 + pad, y0: c.y - hh / 2 - pad, y1: c.y + hh / 2 + pad };
+      const corners = [{ x: R.x0, y: R.y0 }, { x: R.x1, y: R.y0 }, { x: R.x0, y: R.y1 }, { x: R.x1, y: R.y1 }];
+      if (!corners.every(q => pointInRing(q, piece.outer))) continue;
+      if (piece.holes.some(hl => pointInRing(c, hl))) continue;
+      let hit = false;
+      for (const ring of rings) {
+        for (let i = 0; i < ring.length && !hit; i++) if (segHitsRect(ring[i], ring[(i + 1) % ring.length], R)) hit = true;
+        if (hit) break;
+      }
+      if (!hit) return textStrokes(text, c.x - ww / 2, c.y - hh / 2, hh);
+    }
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------------ *
+ * Shelf geometry
+ *
+ * World axes: x to the right, y up, z out from the wall (z = 0 is the wall).
+ * The shelf fills the half ellipsoid x²/a² + y²/b² + z²/c² ≤ 1, z ≥ 0.
+ * Shelves are horizontal plates slotted from the back; dividers are vertical
+ * plates slotted from the front. Each slot is half the crossing length.
+ * ------------------------------------------------------------------ */
+function buildDesign(s) {
+  const msgs = [];
+  const add = (level, msg) => msgs.push({ level, msg });
+  const a = s.w / 2, b = s.h / 2, c = s.d, t = s.t, cl = s.cl;
+  const sw = t + cl;                         // slot width
+  const bitD = bitDiameter(s), r = bitD / 2;
+  const flat = s.fb;
+  const yCut = flat ? -b + s.h * s.fbp / 100 : -b;     // underside of the base
+  const yBase = flat ? yCut + t : -b;                   // top of the base (dividers stand on it)
+  const depth = (x, y) => { const q = 1 - (x * x) / (a * a) - (y * y) / (b * b); return q > 0 ? c * Math.sqrt(q) : 0; };
+
+  const shelfY = range(s.ns).map(j => yBase + (j + 1) * (b - yBase) / (s.ns + 1));
+  const divX = range(s.nd).map(i => -a + (i + 1) * s.w / (s.nd + 1));
+  const shelfOn = shelfY.map(() => true), divOn = divX.map(() => true);
+  const sName = j => `S${j + 1}`, dName = i => `D${i + 1}`;
+  const shelfDepth = j => depth(0, shelfY[j]);
+  const divDepth = i => depth(divX[i], Math.max(0, yBase));
+  // A tab's mortise must be at least as long as the endmill is wide.
+  const minTab = Math.max(5, bitD);
+  const tabsFor = L => {
+    if (L < Math.max(20, 3 * t)) return [];
+    const T = clamp(L * 0.2, Math.min(6, L * 0.2), 40);
+    return (L >= 120 ? [0.25, 0.75] : [0.5]).map(f => [f * L - T / 2, f * L + T / 2]);
+  };
+  // Shorten (or drop) tabs whose base mortise would reach past the base's
+  // curved edge. The mortise's outer side is sw/2 further from the centre.
+  const clipTabs = (tabs, x) => {
+    const lim = depth(Math.abs(x) + sw / 2, yBase) - cl / 2 - Math.max(2, t / 3);
+    return tabs.map(([z0, z1]) => [z0, Math.min(z1, lim)]).filter(([z0, z1]) => z1 - z0 >= minTab);
+  };
+  const baseTabsAt = x => flat ? clipTabs(tabsFor(depth(x, yBase)), x) : [];
+  const divOnBase = i => baseTabsAt(divX[i]).length > 0;
+  const empty = () => ({ pieces: [], msgs, a, b, c, t, sw, yCut, yBase, shelfY, divX, flat, bitD });
+
+  if (sw <= 0) { add('error', 'Slot width (thickness + clearance) must be positive. Increase the slot clearance.'); return empty(); }
+  if (bitD && sw < bitD) add('error', `Slots are ${fmtN(sw)} mm wide but the endmill is ${fmtN(bitD)} mm, so they can't be cut. Use a smaller endmill or thicker material.`);
+
+  // Neighbouring slots need a web of material between them. Dogbones bulge
+  // r·(1 − 1/√2) past each slot wall.
+  const lobe = r > 0 ? r * (1 - Math.SQRT1_2) : 0;
+  const minWeb = Math.max(3, t / 2);
+  const pitchX = s.w / (s.nd + 1), pitchY = (b - yBase) / (s.ns + 1);
+  const tight = [];
+  if (pitchX - sw - 2 * lobe < minWeb) tight.push(`dividers are ${fmtN(pitchX)} mm apart`);
+  if (pitchY - sw - 2 * lobe < minWeb) tight.push(`shelves are ${fmtN(pitchY)} mm apart`);
+  if (tight.length) {
+    add('error', `Pieces are too close together: ${tight.join(' and ')}, but slots are ${fmtN(sw)} mm wide and need at least ${fmtN(minWeb)} mm of material between them. Use fewer shelves or dividers, a larger size, or thinner material.`);
+    return empty();
+  }
+
+  const towardZero = (v, d) => v - Math.sign(v) * Math.min(Math.abs(v), d);
+  function joint(i, j) {
+    const x = divX[i], y = shelfY[j], L = depth(x, y);
+    // The plates have thickness, so they can touch near the surface even when
+    // their centre lines just miss. That needs flagging too.
+    const touch = Math.min(depth(towardZero(x, t / 2), y), depth(x, towardZero(y, t / 2)));
+    if (touch <= 0) return null;
+    if (L <= 0) return { L: touch, ok: false };
+    const half = L / 2;
+    const okShelf = depth(x - sw / 2, y) > half + 0.5 && depth(x + sw / 2, y) > half + 0.5;
+    const okDiv = depth(x, y - sw / 2) > half + 0.5 && depth(x, y + sw / 2) > half + 0.5 && y - sw / 2 > yBase + 0.5;
+    return { L, ok: okShelf && okDiv };
+  }
+  function issues() {
+    const out = [];
+    shelfY.forEach((_, j) => { if (shelfOn[j] && shelfDepth(j) < s.minp) out.push({ msg: `Shelf ${sName(j)} is only ${fmtN(shelfDepth(j))} mm deep.`, victim: ['s', j] }); });
+    divX.forEach((_, i) => { if (divOn[i] && divDepth(i) < s.minp) out.push({ msg: `Divider ${dName(i)} is only ${fmtN(divDepth(i))} mm deep.`, victim: ['d', i] }); });
+    const sJoints = shelfY.map(() => 0), dJoints = divX.map(() => 0);
+    shelfY.forEach((_, j) => divX.forEach((_, i) => {
+      if (!shelfOn[j] || !divOn[i]) return;
+      const jt = joint(i, j);
+      if (!jt) return;
+      sJoints[j]++; dJoints[i]++;
+      const victim = shelfDepth(j) < divDepth(i) ? ['s', j] : ['d', i];
+      if (!jt.ok) out.push({ msg: `${sName(j)} and ${dName(i)} cross only at the curved edge (${fmtN(jt.L)} mm), so their slots would cut through it.`, victim, severe: true });
+      else if (jt.L < s.minj) out.push({ msg: `${sName(j)} and ${dName(i)} cross for only ${fmtN(jt.L)} mm, which makes a weak joint.`, victim });
+    }));
+    shelfY.forEach((_, j) => { if (shelfOn[j] && !sJoints[j]) out.push({ msg: `Shelf ${sName(j)} doesn't cross any divider, so nothing holds it.`, victim: ['s', j], severe: true }); });
+    divX.forEach((_, i) => { if (divOn[i] && !dJoints[i] && !divOnBase(i)) out.push({ msg: `Divider ${dName(i)} doesn't cross any shelf, so nothing holds it.`, victim: ['d', i], severe: true }); });
+    return out;
+  }
+  let found = issues();
+  if (s.drop) {
+    const dropped = [];
+    for (let iter = 0; iter < 200 && found.length; iter++) {
+      let any = false;
+      for (const is of found) {
+        const [kind, idx] = is.victim, arr = kind === 's' ? shelfOn : divOn;
+        if (arr[idx]) { arr[idx] = false; any = true; dropped.push(kind === 's' ? sName(idx) : dName(idx)); }
+      }
+      if (!any) break;
+      found = issues();
+    }
+    if (dropped.length) add('info', `Dropped ${dropped.length} piece${dropped.length > 1 ? 's' : ''} that failed the checks: ${[...new Set(dropped)].join(', ')}. The other pieces keep their positions.`);
+  }
+  for (const is of found) add(is.severe ? 'error' : 'warn', is.msg);
+  if (found.length && !s.drop) add('info', 'Turn on “Drop pieces that fail the checks” to leave these pieces out, or change the counts or size.');
+  if (!shelfOn.some(Boolean) || !divOn.some(Boolean)) add('error', 'Every shelf or every divider was dropped. Relax the checks or change the size.');
+
+  const curveCount = (A, C, frac = 1) => clamp(Math.ceil(frac * Math.PI * Math.sqrt((A * A + C * C) / 2)), 48, 2500);
+  const halfEllipse = (A, C) => { const n = curveCount(A, C), pts = []; for (let q = 1; q < n; q++) { const th = Math.PI * q / n; pts.push(P(A * Math.cos(th), C * Math.sin(th))); } return pts; };
+  const pieces = [];
+  const panelTabs = []; // {y, x0, x1}: shelf tabs that need back-panel mortises
+
+  // Shelves: (u, v) = (x, z)
+  shelfY.forEach((y, j) => {
+    if (!shelfOn[j]) return;
+    const k = Math.sqrt(1 - y * y / (b * b)), A = a * k, C = c * k;
+    const notches = [];
+    divX.forEach((x, i) => {
+      if (!divOn[i]) return;
+      const L = depth(x, y);
+      if (L <= 0 || x - sw / 2 <= -A || x + sw / 2 >= A) return;
+      notches.push({ s0: x - sw / 2, s1: x + sw / 2, inner: [[x - sw / 2, L / 2], [x + sw / 2, L / 2]] });
+    });
+    const slots = notches.length;
+    if (s.bp) {
+      // One tab on the back edge in each gap between divider slots, pointing
+      // into the back panel. Keep its mortise clear of the panel's edge.
+      const lim = a * Math.sqrt(Math.max(0, 1 - ((Math.abs(y) + sw / 2) / b) ** 2)) - cl / 2 - Math.max(2, t / 3);
+      // Gaps come from every active divider (not just the slots this shelf
+      // accepted), so no tab can straddle a panel seam, which sits behind a divider.
+      const bounds = [-A];
+      divX.forEach((x, i) => {
+        if (!divOn[i] || x + sw / 2 <= -A || x - sw / 2 >= A) return;
+        bounds.push(Math.max(-A, x - sw / 2), Math.min(A, x + sw / 2));
+      });
+      bounds.push(A);
+      // Each tab root needs a straight run beside it: enough for a dogbone in CNC mode.
+      const margin = Math.max(3, r > 0 ? Math.SQRT2 * r + 1 : 0);
+      let tabs = 0;
+      for (let q = 0; q < bounds.length; q += 2) {
+        const g0 = bounds[q], g1 = bounds[q + 1], Lg = g1 - g0;
+        const T = Math.min(40, 0.4 * Lg, Lg - 2 * margin), mid = (g0 + g1) / 2;
+        if (T < minTab) continue;
+        const x0 = Math.max(mid - T / 2, -lim), x1 = Math.min(mid + T / 2, lim);
+        if (x1 - x0 < minTab) continue;
+        notches.push({ s0: x0, s1: x1, inner: [[x0, -t], [x1, -t]] });
+        panelTabs.push({ y, x0, x1 });
+        tabs++;
+      }
+      if (!tabs) add('warn', `Shelf ${sName(j)} has no room for tabs into the back panel.`);
+      notches.sort((p, q) => p.s0 - q.s0);
+    }
+    const back = walk([{ s: -A, x: -A, y: 0 }, { s: A, x: A, y: 0 }], u => [u, 0], notches);
+    pieces.push({ id: sName(j), kind: 'shelf', outer: [...back, ...halfEllipse(A, C)], holes: [], place: { axis: 'h', o: y - t / 2 }, joints: slots });
+  });
+
+  // Dividers: (u, v) = (z, y)
+  const baseTabs = []; // {x, tabs}
+  divX.forEach((x, i) => {
+    if (!divOn[i]) return;
+    const k = Math.sqrt(1 - x * x / (a * a)), B = b * k, C = c * k;
+    const trunc = flat && yBase > -B;
+    const vb = trunc ? yBase : -B;
+    const pts = [P(0, B)];
+    if (trunc) {
+      const uB = C * Math.sqrt(Math.max(0, 1 - vb * vb / (B * B)));
+      const tabs = baseTabsAt(x);
+      if (!tabs.length) add('warn', `Divider ${dName(i)} touches the base for only ${fmtN(uB)} mm, close to its edge, so there is no room for a tab; it rests on the base without one.`);
+      else baseTabs.push({ x, tabs });
+      pts.push(...walk([{ s: 0, x: 0, y: vb }, { s: uB, x: uB, y: vb }], u => [u, vb],
+        tabs.map(([z0, z1]) => ({ s0: z0, s1: z1, inner: [[z0, vb - t], [z1, vb - t]] }))));
+    } else {
+      pts.push(P(0, -B));
+    }
+    const phi0 = Math.asin(clamp(vb / B, -1, 1)), span = Math.PI / 2 - phi0;
+    const n = curveCount(B, C, span / Math.PI), samples = [];
+    for (let q = 1; q < n; q++) { const ph = phi0 + span * q / n; samples.push({ s: B * Math.sin(ph), x: C * Math.cos(ph), y: B * Math.sin(ph) }); }
+    const notches = [];
+    shelfY.forEach((y, j) => {
+      if (!shelfOn[j]) return;
+      const L = depth(x, y);
+      if (L <= 0 || y - sw / 2 <= vb || y + sw / 2 >= B) return;
+      notches.push({ s0: y - sw / 2, s1: y + sw / 2, inner: [[L / 2, y - sw / 2], [L / 2, y + sw / 2]] });
+    });
+    pts.push(...walk(samples, v => [C * Math.sqrt(Math.max(0, 1 - v * v / (B * B))), v], notches));
+    pieces.push({ id: dName(i), kind: 'divider', outer: pts, holes: [], place: { axis: 'v', o: x - t / 2 }, joints: notches.length });
+  });
+
+  // Base and feet
+  if (flat) {
+    const kB = Math.sqrt(Math.max(0, 1 - yBase * yBase / (b * b))), A = a * kB, C = c * kB;
+    const holes = [];
+    const mortise = (x, z0, z1) => holes.push([P(x - sw / 2, z0 - cl / 2, true), P(x - sw / 2, z1 + cl / 2, true), P(x + sw / 2, z1 + cl / 2, true), P(x + sw / 2, z0 - cl / 2, true)]);
+    for (const bt of baseTabs) for (const [z0, z1] of bt.tabs) mortise(bt.x, z0, z1);
+
+    if (s.ft) {
+      const aBot = a * Math.sqrt(Math.max(0, 1 - yCut * yCut / (b * b)));
+      const xs = [-aBot, ...baseTabs.map(bt => bt.x), aBot].sort((p, q) => p - q);
+      const mids = []; for (let q = 0; q < xs.length - 1; q++) mids.push((xs[q] + xs[q + 1]) / 2);
+      const pos = mids.filter(m => m > sw);
+      let xf = pos.length ? pos.reduce((best, m) => Math.abs(m - 0.6 * aBot) < Math.abs(best - 0.6 * aBot) ? m : best) : 0.6 * aBot;
+      const tooClose = baseTabs.some(bt => Math.abs(Math.abs(bt.x) - xf) < sw + 2);
+      if (tooClose) add('warn', 'Feet sit very close to a divider tab; check the base mortises.');
+      [-xf, xf].forEach((x, q) => {
+        const Lf = depth(x, yCut) - 10;
+        const tabs = clipTabs(tabsFor(Lf), x);
+        if (Lf < 30 || !tabs.length) { add('warn', `Foot F${q + 1} would be too short (${fmtN(Lf)} mm) and was left out.`); return; }
+        for (const [z0, z1] of tabs) mortise(x, z0, z1);
+        const vt = yCut, vbot = yCut - s.fh;
+        const top = walk([{ s: -Lf, x: Lf, y: vt }, { s: 0, x: 0, y: vt }], sv => [-sv, vt],
+          tabs.slice().sort((p, q2) => q2[0] - p[0]).map(([z0, z1]) => ({ s0: -z1, s1: -z0, inner: [[z1, vt + t], [z0, vt + t]] })));
+        pieces.push({ id: `F${q + 1}`, kind: 'foot', outer: [P(0, vbot), P(Lf, vbot), ...top], holes: [], place: { axis: 'v', o: x - t / 2 }, joints: 0 });
+      });
+    }
+    pieces.push({ id: 'B', kind: 'base', outer: [P(-A, 0), P(A, 0), ...halfEllipse(A, C)], holes, place: { axis: 'h', o: yCut }, joints: 0 });
+  }
+
+  // Back panel: (u, v) = (x, y), behind everything at z ∈ [-t, 0]. It is the
+  // ellipse x²/a² + y²/b² ≤ 1 (cut at the base's underside if flat), split
+  // with vertical seams behind dividers.
+  if (s.bp) {
+    const activeX = divX.filter((_, i) => divOn[i]);
+    let want = s.bpn - 1;
+    if (want > activeX.length) {
+      add('warn', `The back panel can only split into ${activeX.length + 1} pieces here, because seams go behind dividers.`);
+      want = activeX.length;
+    }
+    const avail = activeX.slice(), seams = [];
+    for (let k = 1; k <= want; k++) {
+      const target = -a + k * s.w / (want + 1);
+      let best = 0;
+      avail.forEach((x, q) => { if (Math.abs(x - target) < Math.abs(avail[best] - target)) best = q; });
+      seams.push(avail.splice(best, 1)[0]);
+    }
+    seams.sort((p, q) => p - q);
+    const n = curveCount(a, b) * 2, ell = [];
+    for (let q = 0; q < n; q++) { const th = 2 * Math.PI * q / n; ell.push(P(a * Math.cos(th), b * Math.sin(th))); }
+    const whole = clipPoly(ell, 0, -1, -(flat ? yCut : -b));
+    const edges = [-Infinity, ...seams, Infinity];
+    if (!panelTabs.length) add('warn', 'No shelf has room for tabs, so nothing attaches the back panel.');
+    for (let k = 0; k < edges.length - 1; k++) {
+      const xL = edges[k], xR = edges[k + 1];
+      let outer = whole;
+      if (Number.isFinite(xL)) outer = clipPoly(outer, -1, 0, -xL);
+      if (Number.isFinite(xR)) outer = clipPoly(outer, 1, 0, xR);
+      const holes = panelTabs.filter(pt => pt.x0 > xL && pt.x1 < xR).map(pt => [
+        P(pt.x0 - cl / 2, pt.y - sw / 2, true), P(pt.x0 - cl / 2, pt.y + sw / 2, true),
+        P(pt.x1 + cl / 2, pt.y + sw / 2, true), P(pt.x1 + cl / 2, pt.y - sw / 2, true)]);
+      pieces.push({ id: edges.length > 2 ? `P${k + 1}` : 'P', kind: 'panel', outer, holes, place: { axis: 'b', o: -t }, joints: 0 });
+    }
+  }
+
+  // Clean up, orient, dogbones, labels
+  const problems = new Set();
+  for (const p of pieces) {
+    p.outer = orient(dedupe(p.outer), true);
+    p.holes = p.holes.map(h => orient(dedupe(h), false));
+    if (r > 0) {
+      p.outer = dogbone(p.outer, r, problems, p.id);
+      p.holes = p.holes.map(h => dogbone(h, r, problems, p.id));
+    }
+    p.labels = [];
+    if (s.lb) {
+      const strokes = placeLabel(p, p.id, s.lh);
+      if (strokes) p.labels = strokes; else add('info', `No room for the label on ${p.id}.`);
+    }
+    p.cutLength = perimeter(p.outer) + p.holes.reduce((L, h) => L + perimeter(h), 0);
+  }
+  for (const m of problems) add('error', m);
+
+  const order = { foot: 0, base: 1, divider: 2, shelf: 3, panel: 4 };
+  pieces.sort((p, q) => order[p.kind] - order[q.kind] || p.id.localeCompare(q.id, undefined, { numeric: true }));
+  return { pieces, msgs, a, b, c, t, sw, yCut, yBase, shelfY, divX, flat, bitD };
+}
+
+/* ------------------------------------------------------------------ *
+ * Sheet layout: simple row packing, largest pieces first.
+ * ------------------------------------------------------------------ */
+const rotPts = (pts, rot) => rot ? pts.map(p => ({ x: -p.y, y: p.x })) : pts;
+
+function layoutSheets(design, s) {
+  const { w: SW, h: SH } = sheetSize(s);
+  const m = s.mg, gap = s.mode === 'cnc' ? Math.max(s.gap, bitDiameter(s) + 1) : s.gap;
+  const UW = SW - 2 * m, UH = SH - 2 * m;
+  const msgs = [];
+  const items = design.pieces.map(piece => {
+    const dims = (s.rot ? [0, 1] : [0]).map(rot => { const bb = bbox(rotPts(piece.outer, rot)); return { rot, w: bb.w, h: bb.h }; });
+    const fits = dims.filter(d => d.w <= UW + 1e-6 && d.h <= UH + 1e-6);
+    const wide = UW >= UH;
+    fits.sort((p, q) => wide ? (q.w - q.h) - (p.w - p.h) : (p.w - p.h) - (q.w - q.h));
+    return fits.length ? { piece, ...fits[0], oversize: false } : { piece, ...dims[0], oversize: true };
+  });
+  const sheets = [];
+  const normal = items.filter(it => !it.oversize).sort((p, q) => q.h - p.h || q.w - p.w);
+  for (const it of normal) {
+    let placed = false;
+    for (const sh of sheets) {
+      for (const row of sh.rows) {
+        if (it.h <= row.h + 1e-6 && row.x + it.w <= UW + 1e-6) {
+          sh.items.push({ ...it, x: m + row.x, y: m + row.y }); row.x += it.w + gap; placed = true; break;
+        }
+      }
+      if (placed) break;
+      if (sh.usedH + it.h <= UH + 1e-6) {
+        sh.rows.push({ y: sh.usedH, h: it.h, x: it.w + gap });
+        sh.items.push({ ...it, x: m, y: m + sh.usedH }); sh.usedH += it.h + gap; placed = true; break;
+      }
+    }
+    if (!placed) {
+      sheets.push({ w: SW, h: SH, rows: [{ y: 0, h: it.h, x: it.w + gap }], usedH: it.h + gap, items: [{ ...it, x: m, y: m }] });
+    }
+  }
+  for (const it of items.filter(it => it.oversize)) {
+    msgs.push({ level: 'error', msg: `${it.piece.id} (${fmtN(it.w)} × ${fmtN(it.h)} mm) doesn't fit on the sheet. It is on its own oversize sheet.${it.piece.kind === 'panel' ? ' Split the back panel into more pieces to make it smaller.' : ''}` });
+    sheets.push({ w: it.w + 2 * m, h: it.h + 2 * m, oversize: true, items: [{ ...it, x: m, y: m }] });
+  }
+  return { sheets, msgs, gap };
+}
+
+// Map piece coordinates to sheet coordinates (y down, origin top-left).
+function itemTransform(it) {
+  const bb = bbox(rotPts(it.piece.outer, it.rot));
+  return pts => rotPts(pts, it.rot).map(p => ({ x: it.x + (p.x - bb.x0), y: it.y + (bb.y1 - p.y) }));
+}
+
+/* ------------------------------------------------------------------ *
+ * Export
+ * ------------------------------------------------------------------ */
+const fmtN = n => (Math.round(n * 10) / 10).toLocaleString('en-US', { maximumFractionDigits: 1 });
+const f3 = n => String(Math.round(n * 1000) / 1000);
+const pathD = (pts, closed) => 'M' + pts.map(p => `${f3(p.x)} ${f3(p.y)}`).join(' L') + (closed ? ' Z' : '');
+const xmlEsc = str => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const SETTINGS_TAG = 'parametric-vectors-settings:';
+
+function sheetSVG(sheet, idx, total, s, preview) {
+  const cut = [], lab = [];
+  for (const it of sheet.items) {
+    const tf = itemTransform(it), title = `<title>${it.piece.id}</title>`;
+    for (const h of it.piece.holes) cut.push(`<path id="${it.piece.id}-hole${cut.length}" d="${pathD(tf(h), true)}">${title}</path>`);
+    cut.push(`<path id="${it.piece.id}" d="${pathD(tf(it.piece.outer), true)}">${title}</path>`);
+    for (const l of it.piece.labels) lab.push(`<path d="${pathD(tf(l), false)}"/>`);
+  }
+  const W = f3(sheet.w), H = f3(sheet.h);
+  const sw = preview ? 'stroke-width="1" vector-effect="non-scaling-stroke"' : 'stroke-width="0.1"';
+  const cutColor = preview ? 'var(--cut)' : '#ff0000', engColor = preview ? 'var(--engrave)' : '#0000ff';
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">`,
+    preview ? '' : `<metadata id="pv-settings">${xmlEsc(SETTINGS_TAG + encodeSettings(s))}</metadata>`,
+    preview ? '' : `<!-- Spherical waffle shelf, sheet ${idx + 1} of ${total}. Units: mm. Red = cut, blue = engrave. -->`,
+    preview ? `<rect x="0" y="0" width="${W}" height="${H}" fill="var(--sheet)" stroke="var(--sheet-border)" ${sw}/>` : '',
+    `<g id="cut" inkscape:groupmode="layer" inkscape:label="Cut" fill="none" stroke="${cutColor}" ${sw}>`, ...cut, '</g>',
+    lab.length ? `<g id="engrave" inkscape:groupmode="layer" inkscape:label="Engrave labels" fill="none" stroke="${engColor}" ${sw} stroke-linecap="round" stroke-linejoin="round">` : '', ...lab, lab.length ? '</g>' : '',
+    '</svg>',
+  ].filter(Boolean).join('\n');
+}
+
+function sheetDXF(sheet, s) {
+  const L = [];
+  const g = (code, val) => L.push(String(code), String(val));
+  const poly = (pts, closed, layer, color) => {
+    g(0, 'POLYLINE'); g(8, layer); g(62, color); g(66, 1); g(10, 0); g(20, 0); g(30, 0); g(70, closed ? 1 : 0);
+    for (const p of pts) { g(0, 'VERTEX'); g(8, layer); g(10, f3(p.x)); g(20, f3(sheet.h - p.y)); g(30, 0); }
+    g(0, 'SEQEND'); g(8, layer);
+  };
+  g(999, SETTINGS_TAG + encodeSettings(s));
+  g(0, 'SECTION'); g(2, 'HEADER'); g(9, '$ACADVER'); g(1, 'AC1009'); g(9, '$INSUNITS'); g(70, 4); g(0, 'ENDSEC');
+  g(0, 'SECTION'); g(2, 'ENTITIES');
+  for (const it of sheet.items) {
+    const tf = itemTransform(it);
+    for (const h of it.piece.holes) poly(tf(h), true, 'CUT', 1);
+    poly(tf(it.piece.outer), true, 'CUT', 1);
+    for (const l of it.piece.labels) poly(tf(l), false, 'ENGRAVE', 5);
+  }
+  g(0, 'ENDSEC'); g(0, 'EOF');
+  return L.join('\n') + '\n';
+}
+
+// Minimal uncompressed ZIP writer, so "Download all" is a single download
+// that browsers won't block.
+const CRC_TABLE = (() => {
+  const tbl = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; tbl[n] = c >>> 0; }
+  return tbl;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], central = [];
+  const DOS_DATE = (0 << 9) | (1 << 5) | 1; // 1980-01-01
+  let offset = 0, cdSize = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), data = enc.encode(f.text), crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(8, 0, true); lh.setUint16(10, 0, true); lh.setUint16(12, DOS_DATE, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+    lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(lh.buffer, name, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+    ch.setUint16(10, 0, true); ch.setUint16(12, 0, true); ch.setUint16(14, DOS_DATE, true);
+    ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+    ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+    central.push(ch.buffer, name);
+    offset += 30 + name.length + data.length;
+    cdSize += 46 + name.length;
+  }
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, end.buffer], { type: 'application/zip' });
+}
+
+function download(name, content, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type }));
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+const baseName = s => `waffle-shelf_${s.w}x${s.h}x${s.d}_t${s.t}_${s.ns}s${s.nd}d`;
+function sheetFile(i, kind) {
+  const sh = current.layout.sheets[i], n = current.layout.sheets.length;
+  return {
+    name: `${baseName(current.s)}_sheet${i + 1}of${n}.${kind}`,
+    text: kind === 'svg' ? sheetSVG(sh, i, n, current.s, false) : sheetDXF(sh, current.s),
+    type: kind === 'svg' ? 'image/svg+xml' : 'application/dxf',
+  };
+}
+function downloadSheet(i, kind) {
+  const f = sheetFile(i, kind);
+  download(f.name, f.text, f.type);
+}
+function downloadAll(kind) {
+  const n = current.layout.sheets.length;
+  if (!n) return;
+  if (n === 1) { downloadSheet(0, kind); return; }
+  download(`${baseName(current.s)}_${kind}.zip`, makeZip(current.layout.sheets.map((_, i) => sheetFile(i, kind))));
+}
+
+/* ------------------------------------------------------------------ *
+ * 3D preview (three.js from a CDN; the rest of the app works offline)
+ * ------------------------------------------------------------------ */
+let three = null;
+async function init3D() {
+  const el = document.getElementById('view3d');
+  let THREE, OrbitControls;
+  try {
+    THREE = await import('three');
+    ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js'));
+  } catch (e) {
+    console.warn(e);
+    el.innerHTML = '<div class="placeholder">The 3D preview needs an internet connection to load three.js. Everything else works offline.</div>';
+    return;
+  }
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  } catch (e) {
+    console.warn(e);
+    el.innerHTML = '<div class="placeholder">The 3D preview needs WebGL, which this browser has turned off. Everything else works.</div>';
+    return;
+  }
+  try {
+    el.innerHTML = '<div class="overlay"><button type="button" id="btnView">Reset view</button></div>';
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    el.prepend(renderer.domElement);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(30, 1, 1, 200000);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 1.6));
+    const dl = new THREE.DirectionalLight(0xffffff, 1.6);
+    dl.position.set(0.4, 0.6, 1);
+    camera.add(dl);
+    scene.add(camera);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = false;
+    const render = () => renderer.render(scene, camera);
+    controls.addEventListener('change', render);
+    // Materials are created once and reused by every rebuild.
+    const wood = color => new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
+    const mats = {
+      shelf: wood(0xe0bb8a), divider: wood(0xc9975f), base: wood(0xa8784a), foot: wood(0x8f633a), panel: wood(0xb98c5e),
+      edge: new THREE.LineBasicMaterial({ color: 0x4a3420, transparent: true, opacity: 0.55 }),
+      wall: new THREE.MeshStandardMaterial({ color: 0x9aa3ab, transparent: true, opacity: 0.18, side: THREE.DoubleSide }),
+    };
+    three = { THREE, scene, camera, renderer, controls, render, mats, group: null, fitKey: '' };
+    document.getElementById('btnView').onclick = () => { three.fitKey = ''; build3D(current.design, current.s); };
+    new ResizeObserver(resize3D).observe(el);
+    resize3D();
+    if (current) build3D(current.design, current.s);
+  } catch (e) {
+    console.error(e);
+    el.innerHTML = `<div class="placeholder">The 3D preview failed: ${xmlEsc(String(e.message || e))}</div>`;
+  }
+}
+function resize3D() {
+  if (!three) return;
+  const el = document.getElementById('view3d'), w = el.clientWidth, h = el.clientHeight;
+  three.renderer.setSize(w, h);
+  three.camera.aspect = w / Math.max(1, h);
+  three.camera.updateProjectionMatrix();
+  three.render();
+}
+function build3D(design, s) {
+  if (!three) return;
+  const { THREE, scene } = three;
+  if (three.group) {
+    scene.remove(three.group);
+    three.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+  }
+  const g = new THREE.Group();
+  const mats = three.mats, edgeMat = mats.edge;
+  const t = design.t;
+  for (const p of design.pieces) {
+    const shape = new THREE.Shape(p.outer.map(q => new THREE.Vector2(q.x, q.y)));
+    for (const h of p.holes) shape.holes.push(new THREE.Path(h.map(q => new THREE.Vector2(q.x, q.y))));
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: t, bevelEnabled: false, curveSegments: 1 });
+    const M = new THREE.Matrix4();
+    // Piece (u, v) plus extrusion w -> world. Both maps keep a right-handed basis.
+    if (p.place.axis === 'h') M.set(1, 0, 0, 0, 0, 0, -1, p.place.o + t, 0, 1, 0, 0, 0, 0, 0, 1);
+    else if (p.place.axis === 'b') M.set(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, p.place.o, 0, 0, 0, 1);
+    else M.set(0, 0, -1, p.place.o + t, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1);
+    const mesh = new THREE.Mesh(geo, mats[p.kind]);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), edgeMat);
+    for (const o of [mesh, edges]) { o.matrixAutoUpdate = false; o.matrix.copy(M); g.add(o); }
+  }
+  // Faint wall for context
+  const box = new THREE.Box3().setFromObject(g);
+  const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(size.x * 1.3 + 50, size.y * 1.3 + 50), mats.wall);
+  wall.position.set(center.x, center.y, box.min.z - 1);
+  g.add(wall);
+  scene.add(g);
+  three.group = g;
+
+  const key = [s.w, s.h, s.d, s.fb, s.fbp, s.ft, s.fh].join();
+  if (key !== three.fitKey && !box.isEmpty()) {
+    three.fitKey = key;
+    const r = size.length() / 2, dist = r / Math.sin(three.camera.fov * Math.PI / 360) * 1.05;
+    const dir = new THREE.Vector3(0.45, 0.35, 1).normalize();
+    three.camera.position.copy(center).addScaledVector(dir, dist);
+    three.camera.near = dist / 100; three.camera.far = dist * 100; three.camera.updateProjectionMatrix();
+    three.controls.target.copy(center);
+    three.controls.update();
+  }
+  three.render();
+}
+
+/* ------------------------------------------------------------------ *
+ * UI
+ * ------------------------------------------------------------------ */
+const $ = sel => document.querySelector(sel);
+const form = $('#settings');
+const inputs = {};
+let current = null;
+
+function buildForm() {
+  let fs = null;
+  for (const f of SCHEMA) {
+    if (f.group) { fs = document.createElement('fieldset'); fs.innerHTML = `<legend>${f.group}</legend>`; form.append(fs); continue; }
+    const row = document.createElement('div');
+    row.className = 'row' + (f.type === 'bool' ? ' bool' : '');
+    const id = 'f_' + f.key;
+    const help = f.help ? `<small>${f.help}</small>` : '';
+    let input;
+    if (f.type === 'bool') {
+      input = Object.assign(document.createElement('input'), { type: 'checkbox', id });
+      row.append(input);
+      row.insertAdjacentHTML('beforeend', `<label class="lbl" for="${id}">${f.label}${help}</label>`);
+    } else {
+      row.insertAdjacentHTML('beforeend', `<label class="lbl" for="${id}">${f.label}${help}</label>`);
+      const wrap = document.createElement('div'); wrap.className = 'inwrap';
+      if (f.type === 'select') {
+        input = document.createElement('select'); input.id = id;
+        for (const [v, l] of f.options) input.append(new Option(l, v));
+      } else {
+        input = Object.assign(document.createElement('input'), { type: 'number', id, min: f.min, max: f.max, step: f.step || 'any' });
+      }
+      wrap.append(input);
+      if (f.unit) wrap.insertAdjacentHTML('beforeend', `<span class="unit">${f.unit.replace('% of height', '%')}</span>`);
+      row.append(wrap);
+    }
+    inputs[f.key] = { f, input, row };
+    input.addEventListener(f.type === 'bool' || f.type === 'select' ? 'change' : 'input', scheduleUpdate);
+    if (f.type !== 'bool' && f.type !== 'select') input.addEventListener('change', () => { setForm(readForm()); scheduleUpdate(); });
+    fs.append(row);
+  }
+}
+function setForm(s) {
+  for (const { f, input } of Object.values(inputs)) {
+    if (f.type === 'bool') input.checked = !!s[f.key]; else input.value = s[f.key];
+  }
+}
+function readForm() {
+  const s = {};
+  for (const { f, input } of Object.values(inputs)) {
+    s[f.key] = f.type === 'bool' ? input.checked : (input.value === '' ? f.def : parseField(f, input.value));
+  }
+  return s;
+}
+function updateVisibility(s) {
+  for (const { f, row } of Object.values(inputs)) row.style.display = f.show && !f.show(s) ? 'none' : '';
+}
+
+let timer = 0;
+function scheduleUpdate() { clearTimeout(timer); timer = setTimeout(update, 120); }
+
+let lastHash = '';
+function update() {
+  const s = readForm();
+  updateVisibility(s);
+  const design = buildDesign(s);
+  const layout = layoutSheets(design, s);
+  current = { s, design, layout };
+  renderSummary(); renderMessages(); renderSheets(); renderParts(); renderAssembly();
+  build3D(design, s);
+  const h = encodeSettings(s);
+  if (h !== lastHash) { lastHash = h; try { location.replace('#' + h); } catch (e) { /* ignore */ } }
+}
+
+function worldBox(design) {
+  let b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity, z0: Infinity, z1: -Infinity };
+  const t = design.t;
+  for (const p of design.pieces) {
+    const bb = bbox(p.outer);
+    const ext = p.place.axis === 'h'
+      ? { x0: bb.x0, x1: bb.x1, y0: p.place.o, y1: p.place.o + t, z0: bb.y0, z1: bb.y1 }
+      : p.place.axis === 'b'
+        ? { x0: bb.x0, x1: bb.x1, y0: bb.y0, y1: bb.y1, z0: p.place.o, z1: p.place.o + t }
+        : { x0: p.place.o, x1: p.place.o + t, y0: bb.y0, y1: bb.y1, z0: bb.x0, z1: bb.x1 };
+    for (const k of ['x0', 'y0', 'z0']) b[k] = Math.min(b[k], ext[k]);
+    for (const k of ['x1', 'y1', 'z1']) b[k] = Math.max(b[k], ext[k]);
+  }
+  return b;
+}
+function renderSummary() {
+  const { design, layout, s } = current;
+  const wb = worldBox(design);
+  const cut = design.pieces.reduce((L, p) => L + p.cutLength, 0);
+  const pitchX = s.w / (s.nd + 1), pitchY = (design.b - design.yBase) / (s.ns + 1);
+  const cards = [
+    ['Overall size', design.pieces.length ? `${fmtN(wb.x1 - wb.x0)} × ${fmtN(wb.y1 - wb.y0)} × ${fmtN(wb.z1 - wb.z0)} mm` : '—'],
+    ['Pieces', String(design.pieces.length)],
+    ['Sheets', `${layout.sheets.length} × ${s.sheet === 'custom' ? `${s.sw} × ${s.sh}` : SHEETS[s.sheet].label.replace(/^.*\((.*)\)$/, '$1')}`],
+    ['Slot width', `${Math.round(design.sw * 100) / 100} mm`],
+    ['Cell openings', `${fmtN(pitchX - s.t)} × ${fmtN(pitchY - s.t)} mm`],
+    ['Total cut length', `${fmtN(cut / 1000)} m`],
+  ];
+  $('#summary').innerHTML = cards.map(([k, v]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+}
+function renderMessages() {
+  const all = [...current.design.msgs, ...current.layout.msgs];
+  if (current.s.mode === 'cnc' && current.layout.gap > current.s.gap) all.push({ level: 'info', msg: `Using a ${fmtN(current.layout.gap)} mm gap between pieces so the endmill fits between them.` });
+  const rank = { error: 0, warn: 1, info: 2 };
+  all.sort((p, q) => rank[p.level] - rank[q.level]);
+  $('#messages').innerHTML = all.map(m => `<li class="${m.level}">${xmlEsc(m.msg)}</li>`).join('');
+}
+function renderSheets() {
+  const { layout } = current, n = layout.sheets.length;
+  $('#sheets').innerHTML = layout.sheets.map((sh, i) => `
+    <section class="sheet">
+      <header>
+        <strong>Sheet ${i + 1} of ${n}${sh.oversize ? ' (oversize)' : ''}</strong>
+        <span class="muted">${fmtN(sh.w)} × ${fmtN(sh.h)} mm · ${sh.items.map(it => it.piece.id).join(', ')}</span>
+        <button type="button" data-dl="svg" data-i="${i}">SVG</button>
+        <button type="button" data-dl="dxf" data-i="${i}">DXF</button>
+      </header>
+      ${sheetSVG(sh, i, n, current.s, true)}
+    </section>`).join('') || '<p class="muted">No pieces.</p>';
+}
+function renderParts() {
+  const rows = current.design.pieces.map(p => {
+    const bb = bbox(p.outer);
+    const kind = { shelf: 'Shelf', divider: 'Divider', base: 'Base', foot: 'Foot', panel: 'Back panel' }[p.kind];
+    return `<tr><td>${p.id}</td><td>${kind}</td><td>${fmtN(bb.w)} × ${fmtN(bb.h)} mm</td><td>${p.joints || ''}</td><td>${p.holes.length || ''}</td></tr>`;
+  });
+  $('#parts').innerHTML = `<thead><tr><th>Label</th><th>Type</th><th>Size</th><th>Slots</th><th>Mortises</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+}
+function renderAssembly() {
+  const s = current.s, steps = [];
+  steps.push('Shelves are numbered S1 (bottom) upward and dividers D1 (left) to the right, seen from the front. '
+    + (s.fb ? 'Dividers in mirror-image positions (D1 and the right-most one, and so on) are the same shape; the shelves all differ.'
+            : 'Pieces in mirror-image positions (S1 and the top shelf, D1 and the right-most divider, and so on) are the same shape.'));
+  if (s.fb && s.ft) steps.push('Push the feet (F1, F2) up into the mortises on the underside of the base B.');
+  if (s.fb) steps.push('Stand the dividers on the base with their straight back edges flush with the base’s straight back edge, tabs down through the base mortises.');
+  else steps.push('Stand the dividers up side by side with their straight edges against the wall side and their slots facing the front.');
+  steps.push('Slide each shelf in from the front, straight back edge first, so its slots meet the dividers’ slots. Push until the shelf’s back edge is flush with the dividers’ back edges.');
+  if (s.bp) steps.push(`Press the back panel${s.bpn > 1 ? ' pieces (P1 on the left)' : ' (P)'} onto the tabs sticking out of the shelves’ back edges${s.bpn > 1 ? '; the seams land behind dividers' : ''}.`);
+  steps.push('Glue is optional; a snug slot fit holds well. If the slots are too tight or loose, adjust “Slot clearance” and cut again.');
+  $('#assembly').innerHTML = steps.map(x => `<li>${x}</li>`).join('');
+}
+
+// Toolbar
+$('#sheets').addEventListener('click', e => {
+  const b = e.target.closest('button[data-dl]');
+  if (b) downloadSheet(+b.dataset.i, b.dataset.dl);
+});
+$('#btnAllSvg').onclick = () => downloadAll('svg');
+$('#btnAllDxf').onclick = () => downloadAll('dxf');
+$('#btnReset').onclick = () => { setForm(defaults()); update(); };
+$('#btnShare').onclick = async () => {
+  const msg = $('#shareMsg');
+  try {
+    await navigator.clipboard.writeText(location.href);
+    msg.textContent = location.protocol === 'file:' ? 'Copied. This link opens the file on this computer only; host the page to share it.' : 'Link copied.';
+  } catch (e) {
+    window.prompt('Copy this link:', location.href);
+  }
+  setTimeout(() => { msg.textContent = ''; }, 6000);
+};
+$('#btnLoad').onclick = () => $('#fileLoad').click();
+$('#fileLoad').onchange = async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const text = (await file.text()).replace(/&amp;/g, '&');
+  const m = text.match(/parametric-vectors-settings:([^\s<]+)/);
+  if (!m) { alert('No saved settings were found in that file.'); return; }
+  setForm(decodeSettings(m[1]));
+  update();
+};
+window.addEventListener('hashchange', () => {
+  const h = location.hash.slice(1);
+  if (h && h !== lastHash) { setForm(decodeSettings(h)); update(); }
+});
+
+// Start
+buildForm();
+setForm(decodeSettings(location.hash.slice(1) || location.search.slice(1)));
+update();
+init3D();
+</script>
+</body>
+</html>
