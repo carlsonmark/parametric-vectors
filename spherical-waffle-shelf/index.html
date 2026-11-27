@@ -149,6 +149,9 @@ const SCHEMA = [
   { key: 'fbp', label: 'Cut off bottom', unit: '% of height', def: 10, min: 1, max: 45, step: 0.5, show: s => s.fb },
   { key: 'ft', label: 'Feet under the base', type: 'bool', def: false, show: s => s.fb },
   { key: 'fh', label: 'Foot height', unit: 'mm', def: 25, min: 5, max: 300, step: 1, show: s => s.fb && s.ft },
+  { group: 'Back panel' },
+  { key: 'bp', label: 'Back panel', type: 'bool', def: false, help: 'Sits behind the shelves; tabs on the shelves’ back edges lock into it.' },
+  { key: 'bpn', label: 'Split into pieces', type: 'int', def: 1, min: 1, max: 20, step: 1, show: s => s.bp, help: 'Seams fall behind dividers, so they are hidden and supported.' },
   { group: 'Machine & sheet' },
   { key: 'mode', label: 'Machine', type: 'select', def: 'laser', options: [['laser', 'Laser'], ['cnc', 'CNC router']] },
   { key: 'bit', label: 'Endmill', type: 'select', def: '6.35', options: [['3.175', '1/8" (3.175 mm)'], ['6.35', '1/4" (6.35 mm)'], ['custom', 'Custom']], show: s => s.mode === 'cnc', help: 'Inside corners get dogbones sized to this.' },
@@ -337,6 +340,7 @@ const GLYPHS = {
   'B': [[[0, 0], [0, 6], [3, 6], [4, 5], [4, 4], [3, 3], [0, 3]], [[3, 3], [4, 2], [4, 1], [3, 0], [0, 0]]],
   'D': [[[0, 0], [0, 6], [2, 6], [4, 4], [4, 2], [2, 0], [0, 0]]],
   'F': [[[4, 6], [0, 6], [0, 0]], [[0, 3], [3, 3]]],
+  'P': [[[0, 0], [0, 6], [3, 6], [4, 5], [4, 4], [3, 3], [0, 3]]],
   'S': [[[4, 5], [3, 6], [1, 6], [0, 5], [0, 4], [1, 3], [3, 3], [4, 2], [4, 1], [3, 0], [1, 0], [0, 1]]],
   '-': [[[1, 3], [3, 3]]],
 };
@@ -346,6 +350,17 @@ function textStrokes(text, x0, y0, h) {
   [...text].forEach((ch, i) => {
     for (const line of GLYPHS[ch] || []) out.push(line.map(([x, y]) => ({ x: x0 + (i * 6 + x) * k, y: y0 + y * k })));
   });
+  return out;
+}
+
+// Sutherland–Hodgman: keep the part of a convex polygon where nx·x + ny·y ≤ c.
+function clipPoly(pts, nx, ny, c) {
+  const out = [], f = p => nx * p.x + ny * p.y - c;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length], fp = f(p), fq = f(q);
+    if (fp <= 0) out.push(p);
+    if ((fp <= 0) !== (fq <= 0)) { const k = fp / (fp - fq); out.push(P(p.x + (q.x - p.x) * k, p.y + (q.y - p.y) * k)); }
+  }
   return out;
 }
 
@@ -503,6 +518,7 @@ function buildDesign(s) {
   const curveCount = (A, C, frac = 1) => clamp(Math.ceil(frac * Math.PI * Math.sqrt((A * A + C * C) / 2)), 48, 2500);
   const halfEllipse = (A, C) => { const n = curveCount(A, C), pts = []; for (let q = 1; q < n; q++) { const th = Math.PI * q / n; pts.push(P(A * Math.cos(th), C * Math.sin(th))); } return pts; };
   const pieces = [];
+  const panelTabs = []; // {y, x0, x1}: shelf tabs that need back-panel mortises
 
   // Shelves: (u, v) = (x, z)
   shelfY.forEach((y, j) => {
@@ -515,8 +531,28 @@ function buildDesign(s) {
       if (L <= 0 || x - sw / 2 <= -A || x + sw / 2 >= A) return;
       notches.push({ s0: x - sw / 2, s1: x + sw / 2, inner: [[x - sw / 2, L / 2], [x + sw / 2, L / 2]] });
     });
+    const slots = notches.length;
+    if (s.bp) {
+      // One tab on the back edge in each gap between divider slots, pointing
+      // into the back panel. Keep its mortise clear of the panel's edge.
+      const lim = a * Math.sqrt(Math.max(0, 1 - ((Math.abs(y) + sw / 2) / b) ** 2)) - cl / 2 - Math.max(2, t / 3);
+      const bounds = [-A, ...notches.flatMap(n => [n.s0, n.s1]), A];
+      let tabs = 0;
+      for (let q = 0; q < bounds.length; q += 2) {
+        const g0 = bounds[q], g1 = bounds[q + 1], Lg = g1 - g0;
+        if (Lg < 20) continue;
+        const T = Math.min(40, 0.4 * Lg), mid = (g0 + g1) / 2;
+        const x0 = Math.max(mid - T / 2, -lim), x1 = Math.min(mid + T / 2, lim);
+        if (x1 - x0 < 5) continue;
+        notches.push({ s0: x0, s1: x1, inner: [[x0, -t], [x1, -t]] });
+        panelTabs.push({ y, x0, x1 });
+        tabs++;
+      }
+      if (!tabs) add('warn', `Shelf ${sName(j)} has no room for tabs into the back panel.`);
+      notches.sort((p, q) => p.s0 - q.s0);
+    }
     const back = walk([{ s: -A, x: -A, y: 0 }, { s: A, x: A, y: 0 }], u => [u, 0], notches);
-    pieces.push({ id: sName(j), kind: 'shelf', outer: [...back, ...halfEllipse(A, C)], holes: [], place: { axis: 'h', o: y - t / 2 }, joints: notches.length });
+    pieces.push({ id: sName(j), kind: 'shelf', outer: [...back, ...halfEllipse(A, C)], holes: [], place: { axis: 'h', o: y - t / 2 }, joints: slots });
   });
 
   // Dividers: (u, v) = (z, y)
@@ -580,6 +616,41 @@ function buildDesign(s) {
     pieces.push({ id: 'B', kind: 'base', outer: [P(-A, 0), P(A, 0), ...halfEllipse(A, C)], holes, place: { axis: 'h', o: yCut }, joints: 0 });
   }
 
+  // Back panel: (u, v) = (x, y), behind everything at z ∈ [-t, 0]. It is the
+  // ellipse x²/a² + y²/b² ≤ 1 (cut at the base's underside if flat), split
+  // with vertical seams behind dividers.
+  if (s.bp) {
+    const activeX = divX.filter((_, i) => divOn[i]);
+    let want = s.bpn - 1;
+    if (want > activeX.length) {
+      add('warn', `The back panel can only split into ${activeX.length + 1} pieces here, because seams go behind dividers.`);
+      want = activeX.length;
+    }
+    const avail = activeX.slice(), seams = [];
+    for (let k = 1; k <= want; k++) {
+      const target = -a + k * s.w / (want + 1);
+      let best = 0;
+      avail.forEach((x, q) => { if (Math.abs(x - target) < Math.abs(avail[best] - target)) best = q; });
+      seams.push(avail.splice(best, 1)[0]);
+    }
+    seams.sort((p, q) => p - q);
+    const n = curveCount(a, b) * 2, ell = [];
+    for (let q = 0; q < n; q++) { const th = 2 * Math.PI * q / n; ell.push(P(a * Math.cos(th), b * Math.sin(th))); }
+    const whole = clipPoly(ell, 0, -1, -(flat ? yCut : -b));
+    const edges = [-Infinity, ...seams, Infinity];
+    if (!panelTabs.length) add('warn', 'No shelf has room for tabs, so nothing attaches the back panel.');
+    for (let k = 0; k < edges.length - 1; k++) {
+      const xL = edges[k], xR = edges[k + 1];
+      let outer = whole;
+      if (Number.isFinite(xL)) outer = clipPoly(outer, -1, 0, -xL);
+      if (Number.isFinite(xR)) outer = clipPoly(outer, 1, 0, xR);
+      const holes = panelTabs.filter(pt => pt.x0 > xL && pt.x1 < xR).map(pt => [
+        P(pt.x0 - cl / 2, pt.y - sw / 2, true), P(pt.x0 - cl / 2, pt.y + sw / 2, true),
+        P(pt.x1 + cl / 2, pt.y + sw / 2, true), P(pt.x1 + cl / 2, pt.y - sw / 2, true)]);
+      pieces.push({ id: edges.length > 2 ? `P${k + 1}` : 'P', kind: 'panel', outer, holes, place: { axis: 'b', o: -t }, joints: 0 });
+    }
+  }
+
   // Clean up, orient, dogbones, labels
   const problems = new Set();
   for (const p of pieces) {
@@ -598,7 +669,7 @@ function buildDesign(s) {
   }
   for (const m of problems) add('error', m);
 
-  const order = { foot: 0, base: 1, divider: 2, shelf: 3 };
+  const order = { foot: 0, base: 1, divider: 2, shelf: 3, panel: 4 };
   pieces.sort((p, q) => order[p.kind] - order[q.kind] || p.id.localeCompare(q.id, undefined, { numeric: true }));
   return { pieces, msgs, a, b, c, t, sw, yCut, yBase, shelfY, divX, flat, bitD };
 }
@@ -641,7 +712,7 @@ function layoutSheets(design, s) {
     }
   }
   for (const it of items.filter(it => it.oversize)) {
-    msgs.push({ level: 'error', msg: `${it.piece.id} (${fmtN(it.w)} × ${fmtN(it.h)} mm) doesn't fit on the sheet. It is on its own oversize sheet.` });
+    msgs.push({ level: 'error', msg: `${it.piece.id} (${fmtN(it.w)} × ${fmtN(it.h)} mm) doesn't fit on the sheet. It is on its own oversize sheet.${it.piece.kind === 'panel' ? ' Split the back panel into more pieces to make it smaller.' : ''}` });
     sheets.push({ w: it.w + 2 * m, h: it.h + 2 * m, oversize: true, items: [{ ...it, x: m, y: m }] });
   }
   return { sheets, msgs, gap };
@@ -813,7 +884,7 @@ async function init3D() {
     // Materials are created once and reused by every rebuild.
     const wood = color => new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
     const mats = {
-      shelf: wood(0xe0bb8a), divider: wood(0xc9975f), base: wood(0xa8784a), foot: wood(0x8f633a),
+      shelf: wood(0xe0bb8a), divider: wood(0xc9975f), base: wood(0xa8784a), foot: wood(0x8f633a), panel: wood(0xb98c5e),
       edge: new THREE.LineBasicMaterial({ color: 0x4a3420, transparent: true, opacity: 0.55 }),
       wall: new THREE.MeshStandardMaterial({ color: 0x9aa3ab, transparent: true, opacity: 0.18, side: THREE.DoubleSide }),
     };
@@ -852,6 +923,7 @@ function build3D(design, s) {
     const M = new THREE.Matrix4();
     // Piece (u, v) plus extrusion w -> world. Both maps keep a right-handed basis.
     if (p.place.axis === 'h') M.set(1, 0, 0, 0, 0, 0, -1, p.place.o + t, 0, 1, 0, 0, 0, 0, 0, 1);
+    else if (p.place.axis === 'b') M.set(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, p.place.o, 0, 0, 0, 1);
     else M.set(0, 0, -1, p.place.o + t, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1);
     const mesh = new THREE.Mesh(geo, mats[p.kind]);
     const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), edgeMat);
@@ -861,7 +933,7 @@ function build3D(design, s) {
   const box = new THREE.Box3().setFromObject(g);
   const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
   const wall = new THREE.Mesh(new THREE.PlaneGeometry(size.x * 1.3 + 50, size.y * 1.3 + 50), mats.wall);
-  wall.position.set(center.x, center.y, -1);
+  wall.position.set(center.x, center.y, box.min.z - 1);
   g.add(wall);
   scene.add(g);
   three.group = g;
@@ -958,7 +1030,9 @@ function worldBox(design) {
     const bb = bbox(p.outer);
     const ext = p.place.axis === 'h'
       ? { x0: bb.x0, x1: bb.x1, y0: p.place.o, y1: p.place.o + t, z0: bb.y0, z1: bb.y1 }
-      : { x0: p.place.o, x1: p.place.o + t, y0: bb.y0, y1: bb.y1, z0: bb.x0, z1: bb.x1 };
+      : p.place.axis === 'b'
+        ? { x0: bb.x0, x1: bb.x1, y0: bb.y0, y1: bb.y1, z0: p.place.o, z1: p.place.o + t }
+        : { x0: p.place.o, x1: p.place.o + t, y0: bb.y0, y1: bb.y1, z0: bb.x0, z1: bb.x1 };
     for (const k of ['x0', 'y0', 'z0']) b[k] = Math.min(b[k], ext[k]);
     for (const k of ['x1', 'y1', 'z1']) b[k] = Math.max(b[k], ext[k]);
   }
@@ -1002,7 +1076,7 @@ function renderSheets() {
 function renderParts() {
   const rows = current.design.pieces.map(p => {
     const bb = bbox(p.outer);
-    const kind = { shelf: 'Shelf', divider: 'Divider', base: 'Base', foot: 'Foot' }[p.kind];
+    const kind = { shelf: 'Shelf', divider: 'Divider', base: 'Base', foot: 'Foot', panel: 'Back panel' }[p.kind];
     return `<tr><td>${p.id}</td><td>${kind}</td><td>${fmtN(bb.w)} × ${fmtN(bb.h)} mm</td><td>${p.joints || ''}</td><td>${p.holes.length || ''}</td></tr>`;
   });
   $('#parts').innerHTML = `<thead><tr><th>Label</th><th>Type</th><th>Size</th><th>Slots</th><th>Mortises</th></tr></thead><tbody>${rows.join('')}</tbody>`;
@@ -1016,6 +1090,7 @@ function renderAssembly() {
   if (s.fb) steps.push('Stand the dividers on the base with their straight back edges flush with the base’s straight back edge, tabs down through the base mortises.');
   else steps.push('Stand the dividers up side by side with their straight edges against the wall side and their slots facing the front.');
   steps.push('Slide each shelf in from the front, straight back edge first, so its slots meet the dividers’ slots. Push until the shelf’s back edge is flush with the dividers’ back edges.');
+  if (s.bp) steps.push(`Press the back panel${s.bpn > 1 ? ' pieces (P1 on the left)' : ' (P)'} onto the tabs sticking out of the shelves’ back edges${s.bpn > 1 ? '; the seams land behind dividers' : ''}.`);
   steps.push('Glue is optional; a snug slot fit holds well. If the slots are too tight or loose, adjust “Slot clearance” and cut again.');
   $('#assembly').innerHTML = steps.map(x => `<li>${x}</li>`).join('');
 }

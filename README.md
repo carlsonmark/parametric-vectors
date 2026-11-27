@@ -17,12 +17,15 @@ slide together.
 - **Material:** thickness and slot clearance (default +0.1 mm; tune it with a test cut).
 - **Flat bottom (optional):** the bottom is cut off at a % of the height and replaced by a
   base plate. Divider tabs go through mortises in the base, and optional feet tab in underneath.
+- **Back panel (optional):** an elliptical panel behind the shelves. Each shelf gets a tab
+  on its back edge between every pair of dividers, and the tabs lock into mortises in the
+  panel. The panel can be split into several pieces; the seams fall behind dividers.
 - **Laser or CNC:** CNC mode adds dogbones to inside corners, sized to the endmill (1/8",
   1/4" or custom), and keeps pieces at least one endmill width apart.
 - **Sheets:** presets for Trotec Speedy (730 × 430), Thunder Nova 51 (1300 × 900), and 4'×4'
   and 4'×8' plywood, or a custom size. Pieces are packed in rows across as many sheets as needed.
 - **Labels:** optional engraved piece IDs in a single-stroke font (S1… bottom to top,
-  D1… left to right, B base, F feet).
+  D1… left to right, B base, F feet, P back panel).
 - **Checks:** flags shallow pieces and short or edge-breaking joints, and can drop them.
 - **Export:** one SVG per sheet in real mm, with cut lines in red (`#ff0000`) and labels in
   blue (`#0000ff`) on separate layers. Optional R12 DXF on `CUT` and `ENGRAVE` layers.
