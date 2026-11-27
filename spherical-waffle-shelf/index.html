@@ -420,10 +420,36 @@ function buildDesign(s) {
   const sName = j => `S${j + 1}`, dName = i => `D${i + 1}`;
   const shelfDepth = j => depth(0, shelfY[j]);
   const divDepth = i => depth(divX[i], Math.max(0, yBase));
-  const divOnBase = i => flat && depth(divX[i], yBase) > 0;
+  const tabsFor = L => {
+    if (L < Math.max(20, 3 * t)) return [];
+    const T = clamp(L * 0.2, Math.min(6, L * 0.2), 40);
+    return (L >= 120 ? [0.25, 0.75] : [0.5]).map(f => [f * L - T / 2, f * L + T / 2]);
+  };
+  // Shorten (or drop) tabs whose base mortise would reach past the base's
+  // curved edge. The mortise's outer side is sw/2 further from the centre.
+  const clipTabs = (tabs, x) => {
+    const lim = depth(Math.abs(x) + sw / 2, yBase) - cl / 2 - Math.max(2, t / 3);
+    return tabs.map(([z0, z1]) => [z0, Math.min(z1, lim)]).filter(([z0, z1]) => z1 - z0 >= 5);
+  };
+  const baseTabsAt = x => flat ? clipTabs(tabsFor(depth(x, yBase)), x) : [];
+  const divOnBase = i => baseTabsAt(divX[i]).length > 0;
+  const empty = () => ({ pieces: [], msgs, a, b, c, t, sw, yCut, yBase, shelfY, divX, flat, bitD });
 
-  if (sw <= 0) add('error', 'Slot width (thickness + clearance) must be positive.');
+  if (sw <= 0) { add('error', 'Slot width (thickness + clearance) must be positive. Increase the slot clearance.'); return empty(); }
   if (bitD && sw < bitD) add('error', `Slots are ${fmtN(sw)} mm wide but the endmill is ${fmtN(bitD)} mm, so they can't be cut. Use a smaller endmill or thicker material.`);
+
+  // Neighbouring slots need a web of material between them. Dogbones bulge
+  // r·(1 − 1/√2) past each slot wall.
+  const lobe = r > 0 ? r * (1 - Math.SQRT1_2) : 0;
+  const minWeb = Math.max(3, t / 2);
+  const pitchX = s.w / (s.nd + 1), pitchY = (b - yBase) / (s.ns + 1);
+  const tight = [];
+  if (pitchX - sw - 2 * lobe < minWeb) tight.push(`dividers are ${fmtN(pitchX)} mm apart`);
+  if (pitchY - sw - 2 * lobe < minWeb) tight.push(`shelves are ${fmtN(pitchY)} mm apart`);
+  if (tight.length) {
+    add('error', `Pieces are too close together: ${tight.join(' and ')}, but slots are ${fmtN(sw)} mm wide and need at least ${fmtN(minWeb)} mm of material between them. Use fewer shelves or dividers, a larger size, or thinner material.`);
+    return empty();
+  }
 
   const towardZero = (v, d) => v - Math.sign(v) * Math.min(Math.abs(v), d);
   function joint(i, j) {
@@ -476,11 +502,6 @@ function buildDesign(s) {
 
   const curveCount = (A, C, frac = 1) => clamp(Math.ceil(frac * Math.PI * Math.sqrt((A * A + C * C) / 2)), 48, 2500);
   const halfEllipse = (A, C) => { const n = curveCount(A, C), pts = []; for (let q = 1; q < n; q++) { const th = Math.PI * q / n; pts.push(P(A * Math.cos(th), C * Math.sin(th))); } return pts; };
-  const tabsFor = L => {
-    if (L < Math.max(20, 3 * t)) return [];
-    const T = clamp(L * 0.2, Math.min(6, L * 0.2), 40);
-    return (L >= 120 ? [0.25, 0.75] : [0.5]).map(f => [f * L - T / 2, f * L + T / 2]);
-  };
   const pieces = [];
 
   // Shelves: (u, v) = (x, z)
@@ -508,8 +529,8 @@ function buildDesign(s) {
     const pts = [P(0, B)];
     if (trunc) {
       const uB = C * Math.sqrt(Math.max(0, 1 - vb * vb / (B * B)));
-      const tabs = tabsFor(uB);
-      if (!tabs.length) add('warn', `Divider ${dName(i)} only touches the base for ${fmtN(uB)} mm, too short for a tab; it rests on the base without one.`);
+      const tabs = baseTabsAt(x);
+      if (!tabs.length) add('warn', `Divider ${dName(i)} touches the base for only ${fmtN(uB)} mm, close to its edge, so there is no room for a tab; it rests on the base without one.`);
       else baseTabs.push({ x, tabs });
       pts.push(...walk([{ s: 0, x: 0, y: vb }, { s: uB, x: uB, y: vb }], u => [u, vb],
         tabs.map(([z0, z1]) => ({ s0: z0, s1: z1, inner: [[z0, vb - t], [z1, vb - t]] }))));
@@ -547,7 +568,7 @@ function buildDesign(s) {
       if (tooClose) add('warn', 'Feet sit very close to a divider tab; check the base mortises.');
       [-xf, xf].forEach((x, q) => {
         const Lf = depth(x, yCut) - 10;
-        const tabs = tabsFor(Lf);
+        const tabs = clipTabs(tabsFor(Lf), x);
         if (Lf < 30 || !tabs.length) { add('warn', `Foot F${q + 1} would be too short (${fmtN(Lf)} mm) and was left out.`); return; }
         for (const [z0, z1] of tabs) mortise(x, z0, z1);
         const vt = yCut, vbot = yCut - s.fh;
@@ -684,23 +705,71 @@ function sheetDXF(sheet, s) {
   return L.join('\n') + '\n';
 }
 
-function download(name, text, type) {
+// Minimal uncompressed ZIP writer, so "Download all" is a single download
+// that browsers won't block.
+const CRC_TABLE = (() => {
+  const tbl = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; tbl[n] = c >>> 0; }
+  return tbl;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function makeZip(files) {
+  const enc = new TextEncoder(), parts = [], central = [];
+  const DOS_DATE = (0 << 9) | (1 << 5) | 1; // 1980-01-01
+  let offset = 0, cdSize = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), data = enc.encode(f.text), crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(8, 0, true); lh.setUint16(10, 0, true); lh.setUint16(12, DOS_DATE, true);
+    lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+    lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(lh.buffer, name, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+    ch.setUint16(10, 0, true); ch.setUint16(12, 0, true); ch.setUint16(14, DOS_DATE, true);
+    ch.setUint32(16, crc, true); ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true);
+    ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+    central.push(ch.buffer, name);
+    offset += 30 + name.length + data.length;
+    cdSize += 46 + name.length;
+  }
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, end.buffer], { type: 'application/zip' });
+}
+
+function download(name, content, type) {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.href = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type }));
   a.download = name;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
 }
 const baseName = s => `waffle-shelf_${s.w}x${s.h}x${s.d}_t${s.t}_${s.ns}s${s.nd}d`;
-function downloadSheet(i, kind) {
+function sheetFile(i, kind) {
   const sh = current.layout.sheets[i], n = current.layout.sheets.length;
-  const name = `${baseName(current.s)}_sheet${i + 1}of${n}.${kind}`;
-  if (kind === 'svg') download(name, sheetSVG(sh, i, n, current.s, false), 'image/svg+xml');
-  else download(name, sheetDXF(sh, current.s), 'application/dxf');
+  return {
+    name: `${baseName(current.s)}_sheet${i + 1}of${n}.${kind}`,
+    text: kind === 'svg' ? sheetSVG(sh, i, n, current.s, false) : sheetDXF(sh, current.s),
+    type: kind === 'svg' ? 'image/svg+xml' : 'application/dxf',
+  };
+}
+function downloadSheet(i, kind) {
+  const f = sheetFile(i, kind);
+  download(f.name, f.text, f.type);
 }
 function downloadAll(kind) {
-  current.layout.sheets.forEach((_, i) => setTimeout(() => downloadSheet(i, kind), i * 400));
+  const n = current.layout.sheets.length;
+  if (!n) return;
+  if (n === 1) { downloadSheet(0, kind); return; }
+  download(`${baseName(current.s)}_${kind}.zip`, makeZip(current.layout.sheets.map((_, i) => sheetFile(i, kind))));
 }
 
 /* ------------------------------------------------------------------ *
@@ -741,7 +810,14 @@ async function init3D() {
     controls.enableDamping = false;
     const render = () => renderer.render(scene, camera);
     controls.addEventListener('change', render);
-    three = { THREE, scene, camera, renderer, controls, render, group: null, fitKey: '' };
+    // Materials are created once and reused by every rebuild.
+    const wood = color => new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
+    const mats = {
+      shelf: wood(0xe0bb8a), divider: wood(0xc9975f), base: wood(0xa8784a), foot: wood(0x8f633a),
+      edge: new THREE.LineBasicMaterial({ color: 0x4a3420, transparent: true, opacity: 0.55 }),
+      wall: new THREE.MeshStandardMaterial({ color: 0x9aa3ab, transparent: true, opacity: 0.18, side: THREE.DoubleSide }),
+    };
+    three = { THREE, scene, camera, renderer, controls, render, mats, group: null, fitKey: '' };
     document.getElementById('btnView').onclick = () => { three.fitKey = ''; build3D(current.design, current.s); };
     new ResizeObserver(resize3D).observe(el);
     resize3D();
@@ -767,13 +843,7 @@ function build3D(design, s) {
     three.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
   }
   const g = new THREE.Group();
-  const mats = {
-    shelf: new THREE.MeshStandardMaterial({ color: 0xe0bb8a, roughness: 0.85 }),
-    divider: new THREE.MeshStandardMaterial({ color: 0xc9975f, roughness: 0.85 }),
-    base: new THREE.MeshStandardMaterial({ color: 0xa8784a, roughness: 0.85 }),
-    foot: new THREE.MeshStandardMaterial({ color: 0x8f633a, roughness: 0.85 }),
-  };
-  const edgeMat = new THREE.LineBasicMaterial({ color: 0x4a3420, transparent: true, opacity: 0.55 });
+  const mats = three.mats, edgeMat = mats.edge;
   const t = design.t;
   for (const p of design.pieces) {
     const shape = new THREE.Shape(p.outer.map(q => new THREE.Vector2(q.x, q.y)));
@@ -790,8 +860,7 @@ function build3D(design, s) {
   // Faint wall for context
   const box = new THREE.Box3().setFromObject(g);
   const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
-  const wall = new THREE.Mesh(new THREE.PlaneGeometry(size.x * 1.3 + 50, size.y * 1.3 + 50),
-    new THREE.MeshStandardMaterial({ color: 0x9aa3ab, transparent: true, opacity: 0.18, side: THREE.DoubleSide }));
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(size.x * 1.3 + 50, size.y * 1.3 + 50), mats.wall);
   wall.position.set(center.x, center.y, -1);
   g.add(wall);
   scene.add(g);
@@ -940,7 +1009,9 @@ function renderParts() {
 }
 function renderAssembly() {
   const s = current.s, steps = [];
-  steps.push('Shelves are numbered S1 (bottom) upward and dividers D1 (left) to the right, seen from the front. Mirror-image pairs (S1 and the top shelf, D1 and the right-most divider) are the same shape.');
+  steps.push('Shelves are numbered S1 (bottom) upward and dividers D1 (left) to the right, seen from the front. '
+    + (s.fb ? 'Dividers in mirror-image positions (D1 and the right-most one, and so on) are the same shape; the shelves all differ.'
+            : 'Pieces in mirror-image positions (S1 and the top shelf, D1 and the right-most divider, and so on) are the same shape.'));
   if (s.fb && s.ft) steps.push('Push the feet (F1, F2) up into the mortises on the underside of the base B.');
   if (s.fb) steps.push('Stand the dividers on the base with their straight back edges flush with the base’s straight back edge, tabs down through the base mortises.');
   else steps.push('Stand the dividers up side by side with their straight edges against the wall side and their slots facing the front.');
