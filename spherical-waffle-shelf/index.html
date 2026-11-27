@@ -435,6 +435,8 @@ function buildDesign(s) {
   const sName = j => `S${j + 1}`, dName = i => `D${i + 1}`;
   const shelfDepth = j => depth(0, shelfY[j]);
   const divDepth = i => depth(divX[i], Math.max(0, yBase));
+  // A tab's mortise must be at least as long as the endmill is wide.
+  const minTab = Math.max(5, bitD);
   const tabsFor = L => {
     if (L < Math.max(20, 3 * t)) return [];
     const T = clamp(L * 0.2, Math.min(6, L * 0.2), 40);
@@ -444,7 +446,7 @@ function buildDesign(s) {
   // curved edge. The mortise's outer side is sw/2 further from the centre.
   const clipTabs = (tabs, x) => {
     const lim = depth(Math.abs(x) + sw / 2, yBase) - cl / 2 - Math.max(2, t / 3);
-    return tabs.map(([z0, z1]) => [z0, Math.min(z1, lim)]).filter(([z0, z1]) => z1 - z0 >= 5);
+    return tabs.map(([z0, z1]) => [z0, Math.min(z1, lim)]).filter(([z0, z1]) => z1 - z0 >= minTab);
   };
   const baseTabsAt = x => flat ? clipTabs(tabsFor(depth(x, yBase)), x) : [];
   const divOnBase = i => baseTabsAt(divX[i]).length > 0;
@@ -536,14 +538,23 @@ function buildDesign(s) {
       // One tab on the back edge in each gap between divider slots, pointing
       // into the back panel. Keep its mortise clear of the panel's edge.
       const lim = a * Math.sqrt(Math.max(0, 1 - ((Math.abs(y) + sw / 2) / b) ** 2)) - cl / 2 - Math.max(2, t / 3);
-      const bounds = [-A, ...notches.flatMap(n => [n.s0, n.s1]), A];
+      // Gaps come from every active divider (not just the slots this shelf
+      // accepted), so no tab can straddle a panel seam, which sits behind a divider.
+      const bounds = [-A];
+      divX.forEach((x, i) => {
+        if (!divOn[i] || x + sw / 2 <= -A || x - sw / 2 >= A) return;
+        bounds.push(Math.max(-A, x - sw / 2), Math.min(A, x + sw / 2));
+      });
+      bounds.push(A);
+      // Each tab root needs a straight run beside it: enough for a dogbone in CNC mode.
+      const margin = Math.max(3, r > 0 ? Math.SQRT2 * r + 1 : 0);
       let tabs = 0;
       for (let q = 0; q < bounds.length; q += 2) {
         const g0 = bounds[q], g1 = bounds[q + 1], Lg = g1 - g0;
-        if (Lg < 20) continue;
-        const T = Math.min(40, 0.4 * Lg), mid = (g0 + g1) / 2;
+        const T = Math.min(40, 0.4 * Lg, Lg - 2 * margin), mid = (g0 + g1) / 2;
+        if (T < minTab) continue;
         const x0 = Math.max(mid - T / 2, -lim), x1 = Math.min(mid + T / 2, lim);
-        if (x1 - x0 < 5) continue;
+        if (x1 - x0 < minTab) continue;
         notches.push({ s0: x0, s1: x1, inner: [[x0, -t], [x1, -t]] });
         panelTabs.push({ y, x0, x1 });
         tabs++;
